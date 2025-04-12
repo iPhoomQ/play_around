@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Complete JS Art Platform</title>
+    <style>
+        #container {
+            display: flex;
+            gap: 20px;
+            margin: 20px;
+        }
+        #canvas-container {
+            border: 1px solid #ccc;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        #controls {
+            width: 300px;
+            padding: 20px;
+            background: #f8f8f8;
+            border-radius: 8px;
+        }
+        .control-group {
+            margin: 15px 0;
+            padding: 10px;
+            background: white;
+            border-radius: 4px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        label {
+            display: block;
+            margin: 5px 0;
+            font-weight: bold;
+            color: #333;
+        }
+        input[type="range"] {
+            width: 100%;
+        }
+        #code-output {
+            font-family: 'Fira Code', monospace;
+            white-space: pre-wrap;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px;
+            max-width: 800px;
+        }
+        .hidden { display: none; }
+        #drawingStatus {
+            color: #007bff;
+            font-weight: bold;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="canvas-container">
+            <canvas id="artCanvas" width="600" height="600"></canvas>
+        </div>
+        <div id="controls">
+            <h2>Art Controls</h2>
+            
+            <!-- Mode Selection -->
+            <div class="control-group">
+                <label>Drawing Mode</label>
+                <select id="shapeType">
+                    <option value="circle">Circle</option>
+                    <option value="rect">Rectangle</option>
+                    <option value="freehand">Freehand</option>
+                </select>
+            </div>
+
+            <!-- Position Controls -->
+            <div class="control-group shape-control">
+                <label>Position</label>
+                <div class="slider-container">
+                    <label>X: <span id="posXValue">300</span></label>
+                    <input type="range" id="posX" min="0" max="600" value="300">
+                    
+                    <label>Y: <span id="posYValue">300</span></label>
+                    <input type="range" id="posY" min="0" max="600" value="300">
+                </div>
+            </div>
+
+            <!-- Color & Size -->
+            <div class="control-group shape-control">
+                <label>Fill Color</label>
+                <input type="color" id="fillColor" value="#ff0000">
+                
+                <label>Size: <span id="sizeValue">50</span></label>
+                <input type="range" id="size" min="10" max="200" value="50">
+            </div>
+
+            <!-- Freehand Controls -->
+            <div class="control-group freehand-control hidden">
+                <label>Brush Size: <span id="brushSizeValue">5</span></label>
+                <input type="range" id="brushSize" min="1" max="50" value="5">
+                
+                <label>Drawing Status: <span id="drawingStatus">Ready</span></label>
+            </div>
+
+            <button id="generateCode">Generate Code</button>
+            <button id="clearCanvas">Clear Canvas</button>
+        </div>
+    </div>
+
+    <h3>Generated Code:</h3>
+    <pre id="code-output"></pre>
+
+    <script>
+        const canvas = document.getElementById('artCanvas');
+        const ctx = canvas.getContext('2d');
+        let isDrawing = false;
+        let currentPath = [];
+        const drawings = [];
+
+        // DOM Elements
+        const controls = {
+            shapeType: document.getElementById('shapeType'),
+            posX: document.getElementById('posX'),
+            posY: document.getElementById('posY'),
+            fillColor: document.getElementById('fillColor'),
+            size: document.getElementById('size'),
+            brushSize: document.getElementById('brushSize')
+        };
+
+        // Value Displays
+        const valueDisplays = {
+            posX: document.getElementById('posXValue'),
+            posY: document.getElementById('posYValue'),
+            size: document.getElementById('sizeValue'),
+            brushSize: document.getElementById('brushSizeValue'),
+            drawingStatus: document.getElementById('drawingStatus')
+        };
+
+        // Event Listeners
+        function initialize() {
+            // Input Events
+            controls.shapeType.addEventListener('change', updateControlVisibility);
+            controls.posX.addEventListener('input', updatePositionDisplay);
+            controls.posY.addEventListener('input', updatePositionDisplay);
+            controls.size.addEventListener('input', updateSizeDisplay);
+            controls.brushSize.addEventListener('input', updateBrushDisplay);
+            
+            // Canvas Events
+            canvas.addEventListener('mousedown', startDrawing);
+            canvas.addEventListener('mousemove', draw);
+            canvas.addEventListener('mouseup', stopDrawing);
+            canvas.addEventListener('mouseleave', stopDrawing);
+
+            // Button Events
+            document.getElementById('generateCode').addEventListener('click', generateAndShowCode);
+            document.getElementById('clearCanvas').addEventListener('click', clearCanvas);
+
+            // Initial update
+            updateControlVisibility();
+            updateAllDisplays();
+            updateCanvas();
+        }
+
+        function updateControlVisibility() {
+            const isFreehand = controls.shapeType.value === 'freehand';
+            document.querySelectorAll('.shape-control').forEach(el => 
+                el.classList.toggle('hidden', isFreehand));
+            document.querySelectorAll('.freehand-control').forEach(el => 
+                el.classList.toggle('hidden', !isFreehand));
+        }
+
+        function updateAllDisplays() {
+            updatePositionDisplay();
+            updateSizeDisplay();
+            updateBrushDisplay();
+        }
+
+        function updatePositionDisplay() {
+            valueDisplays.posX.textContent = controls.posX.value;
+            valueDisplays.posY.textContent = controls.posY.value;
+            if(controls.shapeType.value !== 'freehand') updateCanvas();
+        }
+
+        function updateSizeDisplay() {
+            valueDisplays.size.textContent = controls.size.value;
+            if(controls.shapeType.value !== 'freehand') updateCanvas();
+        }
+
+        function updateBrushDisplay() {
+            valueDisplays.brushSize.textContent = controls.brushSize.value;
+        }
+
+        // Drawing Functions
+        function startDrawing(e) {
+            if(controls.shapeType.value !== 'freehand') return;
+            isDrawing = true;
+            currentPath = [];
+            const [x, y] = getCanvasCoordinates(e);
+            currentPath.push({ x, y });
+            valueDisplays.drawingStatus.textContent = 'Drawing...';
+        }
+
+        function draw(e) {
+            if(!isDrawing) return;
+            
+            const [x, y] = getCanvasCoordinates(e);
+            ctx.beginPath();
+            ctx.moveTo(currentPath[currentPath.length-1].x, currentPath[currentPath.length-1].y);
+            ctx.lineTo(x, y);
+            ctx.strokeStyle = controls.fillColor.value;
+            ctx.lineWidth = controls.brushSize.value;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+            
+            currentPath.push({ x, y });
+            updateCanvas();
+        }
+
+        function stopDrawing() {
+            if(!isDrawing) return;
+            isDrawing = false;
+            valueDisplays.drawingStatus.textContent = 'Ready';
+            if(currentPath.length > 1) {
+                drawings.push({
+                    type: 'path',
+                    points: [...currentPath],
+                    color: controls.fillColor.value,
+                    size: controls.brushSize.value
+                });
+            }
+        }
+
+        function getCanvasCoordinates(e) {
+            const rect = canvas.getBoundingClientRect();
+            return [
+                e.clientX - rect.left,
+                e.clientY - rect.top
+            ];
+        }
+
+        function updateCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw stored elements
+            drawings.forEach(drawElement);
+            
+            // Draw preview for shapes
+            if(controls.shapeType.value !== 'freehand') {
+                drawElement(getCurrentShapeConfig(), true);
+            }
+        }
+
+        function drawElement(config, isPreview = false) {
+            if(config.type === 'path') {
+                ctx.strokeStyle = isPreview ? config.color + '80' : config.color;
+                ctx.lineWidth = config.size;
+                ctx.lineCap = 'round';
+                ctx.beginPath();
+                config.points.forEach((point, i) => {
+                    if(i === 0) ctx.moveTo(point.x, point.y);
+                    else ctx.lineTo(point.x, point.y);
+                });
+                ctx.stroke();
+            } else {
+                ctx.fillStyle = isPreview ? config.color + '80' : config.color;
+                switch(config.shape) {
+                    case 'circle':
+                        ctx.beginPath();
+                        ctx.arc(config.x, config.y, config.size/2, 0, Math.PI * 2);
+                        ctx.fill();
+                        break;
+                    case 'rect':
+                        ctx.fillRect(
+                            config.x - config.size/2,
+                            config.y - config.size/2,
+                            config.size,
+                            config.size
+                        );
+                        break;
+                }
+            }
+        }
+
+        function getCurrentShapeConfig() {
+            return {
+                type: 'shape',
+                shape: controls.shapeType.value,
+                x: parseInt(controls.posX.value),
+                y: parseInt(controls.posY.value),
+                color: controls.fillColor.value,
+                size: parseInt(controls.size.value)
+            };
+        }
+
+        // Code Generation
+        function generateAndShowCode() {
+            const code = generateFullCode();
+            document.getElementById('code-output').textContent = code;
+        }
+
+        function generateFullCode() {
+            let code = `const canvas = document.createElement('canvas');\n`
+                     + `canvas.width = 600;\n`
+                     + `canvas.height = 600;\n`
+                     + `document.body.appendChild(canvas);\n`
+                     + `const ctx = canvas.getContext('2d');\n\n`;
+
+            drawings.forEach((drawing, i) => {
+                code += `// Element ${i+1}\n`;
+                if(drawing.type === 'path') {
+                    code += generatePathCode(drawing);
+                } else {
+                    code += generateShapeCode(drawing);
+                }
+                code += '\n';
+            });
+
+            return code;
+        }
+
+        function generatePathCode(path) {
+            return `ctx.beginPath();\n`
+                 + `ctx.strokeStyle = "${path.color}";\n`
+                 + `ctx.lineWidth = ${path.size};\n`
+                 + `ctx.lineCap = 'round';\n`
+                 + path.points.map((p, i) => 
+                     `${i === 0 ? 'ctx.moveTo' : 'ctx.lineTo'}(${p.x}, ${p.y});`
+                   ).join('\n')
+                 + `\nctx.stroke();\n`;
+        }
+
+        function generateShapeCode(shape) {
+            if(shape.shape === 'circle') {
+                return `ctx.fillStyle = "${shape.color}";\n`
+                     + `ctx.beginPath();\n`
+                     + `ctx.arc(${shape.x}, ${shape.y}, ${shape.size/2}, 0, Math.PI * 2);\n`
+                     + `ctx.fill();\n`;
+            }
+            return `ctx.fillStyle = "${shape.color}";\n`
+                 + `ctx.fillRect(${shape.x - shape.size/2}, ${shape.y - shape.size/2}, `
+                 + `${shape.size}, ${shape.size});\n`;
+        }
+
+        // Canvas Management
+        function clearCanvas() {
+            drawings.length = 0;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            document.getElementById('code-output').textContent = '';
+        }
+
+        // Initialize Application
+        initialize();
+    </script>
+</body>
+</html>
